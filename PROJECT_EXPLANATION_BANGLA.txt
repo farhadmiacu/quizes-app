@@ -1,0 +1,752 @@
+================================================================================
+        LARAVEL QUIZ ADMIN PANEL — সম্পূর্ণ প্রজেক্ট ব্যাখ্যা (বাংলায়)
+================================================================================
+
+লেখক: GitHub Copilot
+তারিখ: ৬ মার্চ, ২০২৬
+ফ্রেমওয়ার্ক: Laravel 12 + Breeze (Blade stack)
+
+================================================================================
+                            প্রজেক্টের সারসংক্ষেপ
+================================================================================
+
+এই প্রজেক্টটি একটি MCQ (Multiple Choice Question) কুইজ অ্যাডমিন প্যানেল।
+অ্যাডমিন লগইন করে প্রশ্ন তৈরি, সম্পাদনা, মুছে ফেলা এবং পাবলিশ করতে পারবেন।
+পাবলিক ইউজাররা /quiz পেজে গিয়ে কুইজ দিতে পারবেন।
+
+প্রজেক্টে দুটি অংশ:
+  ১. Admin Panel  → লগইন প্রয়োজন, প্রশ্ন ম্যানেজমেন্ট
+  ২. Quiz Page    → পাবলিক, শুধু published প্রশ্ন দেখা যাবে
+
+
+================================================================================
+                            ফোল্ডার স্ট্রাকচার
+================================================================================
+
+quizes-app/
+├── app/
+│   ├── Http/
+│   │   └── Controllers/
+│   │       └── Admin/
+│   │           └── QuestionController.php   ← মূল কন্ট্রোলার
+│   ├── Models/
+│   │   ├── Question.php                     ← প্রশ্নের মডেল
+│   │   └── Option.php                       ← অপশনের মডেল
+│   └── Providers/
+│       └── AppServiceProvider.php           ← পেজিনেশন কাস্টমাইজেশন
+│
+├── database/
+│   └── migrations/
+│       ├── ...create_questions_table.php    ← questions টেবিল
+│       └── ...create_options_table.php      ← options টেবিল
+│
+├── resources/views/
+│   ├── admin/
+│   │   ├── layout.blade.php                 ← অ্যাডমিন লেআউট
+│   │   ├── pagination.blade.php             ← কাস্টম পেজিনেশন
+│   │   └── questions/
+│   │       ├── index.blade.php              ← প্রশ্নের তালিকা
+│   │       ├── create.blade.php             ← নতুন প্রশ্ন তৈরি
+│   │       └── edit.blade.php               ← প্রশ্ন এডিট
+│   └── quiz/
+│       └── index.blade.php                  ← পাবলিক কুইজ পেজ
+│
+└── routes/
+    └── web.php                              ← সব রাউট
+
+
+================================================================================
+                            ডেটাবেজ টেবিল বর্ণনা
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+১. questions টেবিল
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  কলাম           | টাইপ                        | বিবরণ
+  ────────────────┼─────────────────────────────┼─────────────────────────────
+  id              | bigint (primary key)         | অটো ইনক্রিমেন্ট আইডি
+  question_text   | text                        | প্রশ্নের টেক্সট
+  status          | enum('published','draft')    | প্রশ্নের অবস্থা
+  sort_order      | integer (default: 0)        | সাজানোর ক্রম
+  created_at      | timestamp                   | তৈরির সময়
+  updated_at      | timestamp                   | আপডেটের সময়
+
+  → status 'draft' মানে প্রশ্নটি এখনো পাবলিশ হয়নি, শুধু অ্যাডমিন দেখতে পাবেন।
+  → status 'published' মানে প্রশ্নটি কুইজ পেজে দেখা যাবে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+২. options টেবিল
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  কলাম           | টাইপ                        | বিবরণ
+  ────────────────┼─────────────────────────────┼─────────────────────────────
+  id              | bigint (primary key)         | অটো ইনক্রিমেন্ট আইডি
+  question_id     | bigint (foreign key)        | কোন প্রশ্নের অপশন
+  option_text     | string                      | অপশনের টেক্সট
+  is_correct      | boolean (default: false)    | এটি সঠিক উত্তর কিনা
+  sort_order      | integer (default: 0)        | সাজানোর ক্রম
+  created_at      | timestamp                   | তৈরির সময়
+  updated_at      | timestamp                   | আপডেটের সময়
+
+  → question_id এর উপর CASCADE DELETE আছে। মানে কোনো প্রশ্ন মুছে ফেললে
+    সেই প্রশ্নের সব অপশনও স্বয়ংক্রিয়ভাবে মুছে যাবে।
+  → প্রতিটি প্রশ্নে সর্বনিম্ন ২টি এবং সর্বোচ্চ ৪টি অপশন থাকতে পারে।
+  → একটি প্রশ্নে শুধুমাত্র একটি অপশনে is_correct = true থাকবে।
+
+
+================================================================================
+                            মাইগ্রেশন ফাইল ব্যাখ্যা
+================================================================================
+
+📄 2026_03_06_000001_create_questions_table.php
+
+  Schema::create('questions', function (Blueprint $table) {
+      $table->id();                                          ← id কলাম
+      $table->text('question_text');                         ← প্রশ্নের লেখা
+      $table->enum('status', ['published', 'draft'])
+            ->default('draft');                             ← ডিফল্ট draft
+      $table->integer('sort_order')->default(0);            ← সাজানোর ক্রম
+      $table->timestamps();                                  ← created_at, updated_at
+  });
+
+📄 2026_03_06_000002_create_options_table.php
+
+  Schema::create('options', function (Blueprint $table) {
+      $table->id();
+      $table->foreignId('question_id')
+            ->constrained('questions')
+            ->cascadeOnDelete();     ← প্রশ্ন মুছলে অপশনও মুছবে
+      $table->string('option_text');
+      $table->boolean('is_correct')->default(false);
+      $table->integer('sort_order')->default(0);
+      $table->timestamps();
+  });
+
+  → cascadeOnDelete() মানে: questions টেবিল থেকে কোনো রো মুছলে
+    options টেবিল থেকে সেই question_id এর সব রো স্বয়ংক্রিয়ভাবে মুছে যাবে।
+
+
+================================================================================
+                            মডেল ব্যাখ্যা
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 app/Models/Question.php
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  protected $fillable = ['question_text', 'status', 'sort_order'];
+
+  → $fillable মানে এই তিনটি কলামে mass assignment করা যাবে।
+    অর্থাৎ Question::create([...]) বা $question->update([...]) এ এই
+    ফিল্ডগুলো ব্যবহার করা নিরাপদ।
+
+  ─────────────────────────────────────────────────────────────────────
+  Relationship: options()
+  ─────────────────────────────────────────────────────────────────────
+
+  public function options(): HasMany
+  {
+      return $this->hasMany(Option::class)->orderBy('sort_order');
+  }
+
+  → এটি Question আর Option মডেলের মধ্যে "এক থেকে অনেক" সম্পর্ক তৈরি করে।
+  → একটি প্রশ্নের অনেক অপশন থাকতে পারে।
+  → orderBy('sort_order') মানে অপশনগুলো sort_order অনুযায়ী সাজানো থাকবে।
+  → ব্যবহার: $question->options  → সেই প্রশ্নের সব অপশন পাওয়া যাবে।
+
+  ─────────────────────────────────────────────────────────────────────
+  Helper Method: correctOption()
+  ─────────────────────────────────────────────────────────────────────
+
+  public function correctOption(): ?Option
+  {
+      return $this->options()->where('is_correct', true)->first();
+  }
+
+  → এই মেথডটি কোনো প্রশ্নের সঠিক অপশনটি খুঁজে বের করে।
+  → is_correct = true এমন প্রথম অপশনটি রিটার্ন করে।
+  → যদি কোনো সঠিক অপশন না থাকে, null রিটার্ন করে (?Option মানে null-able)।
+
+  ─────────────────────────────────────────────────────────────────────
+  Helper Method: isPublished()
+  ─────────────────────────────────────────────────────────────────────
+
+  public function isPublished(): bool
+  {
+      return $this->status === 'published';
+  }
+
+  → প্রশ্নটি পাবলিশড কিনা তা true/false রিটার্ন করে।
+  → toggleStatus এ ব্যবহার হয়: যদি published থাকে draft করো, না হলে publish করো।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 app/Models/Option.php
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  protected $fillable = ['question_id', 'option_text', 'is_correct', 'sort_order'];
+
+  → এই চারটি কলামে mass assignment করা যাবে।
+
+  protected $casts = [
+      'is_correct' => 'boolean',
+  ];
+
+  → $casts মানে Laravel স্বয়ংক্রিয়ভাবে is_correct কলামটিকে PHP boolean এ
+    রূপান্তর করবে। ডেটাবেজে 0/1 হলেও PHP-তে true/false হিসেবে পাওয়া যাবে।
+
+  ─────────────────────────────────────────────────────────────────────
+  Relationship: question()
+  ─────────────────────────────────────────────────────────────────────
+
+  public function question(): BelongsTo
+  {
+      return $this->belongsTo(Question::class);
+  }
+
+  → এটি Option এবং Question এর মধ্যে "অনেক থেকে এক" সম্পর্ক।
+  → একটি অপশন একটি প্রশ্নের অন্তর্গত।
+  → ব্যবহার: $option->question → সেই অপশনের প্রশ্নটি পাওয়া যাবে।
+
+
+================================================================================
+                            রাউট ব্যাখ্যা (routes/web.php)
+================================================================================
+
+📄 routes/web.php
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+① পাবলিক হোম রাউট
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Route::get('/', function () {
+      return view('welcome');
+  });
+
+  → URL: http://127.0.0.1:8000/
+  → কোনো লগইন ছাড়াই অ্যাক্সেস করা যাবে।
+  → Laravel এর ডিফল্ট welcome পেজ দেখাবে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+② Dashboard রাউট (লগইনের পর রিডাইরেক্ট)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Route::get('/dashboard', function () {
+      return redirect()->route('admin.questions.index');
+  })->middleware(['auth', 'verified'])->name('dashboard');
+
+  → URL: http://127.0.0.1:8000/dashboard
+  → middleware(['auth', 'verified']): লগইন এবং ইমেইল ভেরিফাই করা থাকতে হবে।
+  → লগইন করার পর Breeze স্বয়ংক্রিয়ভাবে /dashboard এ পাঠায়।
+  → আমরা সেটিকে সরাসরি admin.questions.index এ রিডাইরেক্ট করেছি।
+    ফলে লগইন করলেই সরাসরি প্রশ্নের তালিকায় চলে যাবে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+③ Admin রাউট গ্রুপ (লগইন প্রয়োজন)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Route::prefix('admin')->name('admin.')->middleware(['auth'])->group(function () {
+      Route::resource('questions', QuestionController::class);
+      Route::post('questions/{question}/toggle-status', ...)
+           ->name('questions.toggle-status');
+  });
+
+  → prefix('admin'): সব URL এর আগে /admin যোগ হবে।
+  → name('admin.'): সব রাউটের নামের আগে admin. যোগ হবে।
+  → middleware(['auth']): লগইন না করলে /login পেজে পাঠিয়ে দেবে।
+
+  Route::resource('questions', ...) থেকে যে রাউটগুলো তৈরি হয়:
+
+  HTTP Method | URL                              | Controller Method | Route Name
+  ────────────┼──────────────────────────────────┼───────────────────┼──────────────────────────
+  GET         | /admin/questions                  | index()           | admin.questions.index
+  GET         | /admin/questions/create           | create()          | admin.questions.create
+  POST        | /admin/questions                  | store()           | admin.questions.store
+  GET         | /admin/questions/{question}       | show()            | admin.questions.show
+  GET         | /admin/questions/{question}/edit  | edit()            | admin.questions.edit
+  PUT/PATCH   | /admin/questions/{question}       | update()          | admin.questions.update
+  DELETE      | /admin/questions/{question}       | destroy()         | admin.questions.destroy
+  POST        | /admin/questions/{question}/toggle-status | toggleStatus() | admin.questions.toggle-status
+
+  → {question} হলো Route Model Binding — Laravel স্বয়ংক্রিয়ভাবে URL থেকে
+    question এর id নিয়ে ডেটাবেজ থেকে সেই Question অবজেক্ট খুঁজে বের করে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+④ পাবলিক কুইজ রাউট
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Route::get('/quiz', fn() => view('quiz.index', [
+      'questions' => Question::where('status', 'published')
+                      ->with('options')->orderBy('sort_order')->get()
+  ]))->name('quiz.index');
+
+  → URL: http://127.0.0.1:8000/quiz
+  → লগইন ছাড়াই অ্যাক্সেস করা যাবে (কোনো middleware নেই)।
+  → শুধুমাত্র status = 'published' এমন প্রশ্নগুলো লোড হবে।
+  → with('options'): Eager Loading — প্রশ্নের সাথে অপশনগুলোও একবারে লোড হবে।
+  → orderBy('sort_order'): sort_order অনুযায়ী প্রশ্ন সাজানো থাকবে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⑤ Breeze Auth রাউট (routes/auth.php এ include হয়)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  require __DIR__.'/auth.php';
+
+  → এই লাইনটি Laravel Breeze এর auth.php ফাইলটি include করে।
+  → এর মাধ্যমে নিচের রাউটগুলো তৈরি হয়:
+    - GET  /login       → লগইন ফর্ম
+    - POST /login       → লগইন প্রসেস
+    - POST /logout      → লগআউট
+    - GET  /register    → রেজিস্ট্রেশন ফর্ম
+    - POST /register    → রেজিস্ট্রেশন প্রসেস
+    - GET  /forgot-password → পাসওয়ার্ড ভুলে গেলে
+
+
+================================================================================
+                        কন্ট্রোলার ব্যাখ্যা (QuestionController)
+================================================================================
+
+📄 app/Http/Controllers/Admin/QuestionController.php
+
+এই কন্ট্রোলারে মোট ৭টি মেথড আছে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+① index() — প্রশ্নের তালিকা
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  public function index()
+  {
+      $questions = Question::withCount('options')
+          ->with('options')
+          ->orderBy('sort_order')
+          ->paginate(15);
+
+      return view('admin.questions.index', compact('questions'));
+  }
+
+  → withCount('options'): প্রতিটি প্রশ্নের সাথে সে কতটি অপশন আছে তার সংখ্যা
+    একটি options_count প্রপার্টিতে লোড করে। ভিউতে $question->options_count
+    দিয়ে অ্যাক্সেস করা হয়।
+  → with('options'): প্রতিটি প্রশ্নের অপশনগুলোও লোড করে (Eager Loading)।
+    এতে N+1 query সমস্যা এড়ানো যায়।
+  → orderBy('sort_order'): sort_order অনুযায়ী ক্রমানুসারে সাজায়।
+  → paginate(15): প্রতি পেজে ১৫টি প্রশ্ন দেখাবে।
+  → compact('questions'): $questions ভেরিয়েবলটি ভিউতে পাঠায়।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+② create() — নতুন প্রশ্ন তৈরির ফর্ম
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  public function create()
+  {
+      return view('admin.questions.create');
+  }
+
+  → শুধু create ভিউটি রিটার্ন করে। কোনো ডেটা পাঠানো হয় না।
+  → ভিউতে JavaScript দিয়ে ডায়নামিক অপশন বিল্ডার তৈরি করা হয়েছে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+③ store(Request $request) — নতুন প্রশ্ন সংরক্ষণ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  public function store(Request $request)
+  {
+      $validated = $request->validate([
+          'question_text'  => 'required|string|max:1000',
+          'status'         => 'required|in:published,draft',
+          'options'        => 'required|array|min:2|max:4',
+          'options.*.text' => 'required|string|max:500',
+          'correct_option' => 'required|integer|min:0',
+      ]);
+
+  → $request->validate(): ফর্ম থেকে আসা ডেটা যাচাই করে।
+    যদি যাচাই ব্যর্থ হয়, স্বয়ংক্রিয়ভাবে ফর্মে ফিরে যাবে এবং ত্রুটি দেখাবে।
+
+  ভ্যালিডেশন নিয়মের বিস্তারিত:
+    - required        → অবশ্যই পূরণ করতে হবে
+    - string          → টেক্সট হতে হবে
+    - max:1000        → সর্বোচ্চ ১০০০ অক্ষর
+    - in:published,draft → শুধু এই দুটি মান গ্রহণযোগ্য
+    - array           → অপশন একটি অ্যারে হতে হবে
+    - min:2           → কমপক্ষে ২টি অপশন থাকতে হবে
+    - max:4           → সর্বোচ্চ ৪টি অপশন
+    - options.*.text  → প্রতিটি অপশনের text ফিল্ড required
+    - integer|min:0   → correct_option একটি পূর্ণসংখ্যা, কমপক্ষে ০
+
+      $question = Question::create([
+          'question_text' => $validated['question_text'],
+          'status'        => $validated['status'],
+          'sort_order'    => Question::max('sort_order') + 1,
+      ]);
+
+  → Question::max('sort_order') + 1: বর্তমানে সবচেয়ে বড় sort_order এর
+    সাথে ১ যোগ করে নতুন প্রশ্নকে তালিকার শেষে রাখে।
+
+      foreach ($validated['options'] as $index => $optionData) {
+          $question->options()->create([
+              'option_text' => $optionData['text'],
+              'is_correct'  => ($index === (int) $validated['correct_option']),
+              'sort_order'  => $index,
+          ]);
+      }
+
+  → foreach দিয়ে প্রতিটি অপশন লুপ করা হয়।
+  → $index === (int) $validated['correct_option']: লুপের বর্তমান ইনডেক্স
+    যদি correct_option এর মানের সমান হয়, তাহলে is_correct = true।
+    উদাহরণ: correct_option = 1 হলে, index 1 এর অপশনটি সঠিক হবে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+④ edit(Question $question) — প্রশ্ন এডিটের ফর্ম
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  public function edit(Question $question)
+  {
+      $question->load('options');
+      return view('admin.questions.edit', compact('question'));
+  }
+
+  → Question $question: Route Model Binding — Laravel নিজেই URL থেকে id পড়ে
+    ডেটাবেজ থেকে Question অবজেক্ট বের করে মেথডে দেয়। না পেলে 404 দেখায়।
+  → $question->load('options'): প্রশ্নের সাথে সম্পর্কিত অপশনগুলো লোড করে।
+  → ভিউতে $question পাঠানো হয়, যেখানে JavaScript দিয়ে পূর্বের ডেটা দেখানো হয়।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⑤ update(Request $request, Question $question) — প্রশ্ন আপডেট
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  → store() এর মতোই ভ্যালিডেশন করে।
+  → $question->update([...]): প্রশ্নের question_text এবং status আপডেট করে।
+  → $question->options()->delete(): পুরোনো সব অপশন মুছে ফেলে।
+  → তারপর আবার foreach দিয়ে নতুন অপশনগুলো তৈরি করে।
+
+  এই পদ্ধতিকে বলে "delete and recreate" — পুরোনো অপশন আপডেট না করে
+  মুছে নতুন করে তৈরি করা। এটি সহজ এবং ত্রুটিমুক্ত।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⑥ destroy(Question $question) — প্রশ্ন মুছে ফেলা
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  public function destroy(Question $question)
+  {
+      $question->delete();
+      return redirect()->route('admin.questions.index')
+          ->with('success', 'Question deleted successfully.');
+  }
+
+  → $question->delete(): ডেটাবেজ থেকে প্রশ্নটি মুছে ফেলে।
+  → database migration এ cascadeOnDelete() থাকার কারণে সেই প্রশ্নের
+    সব অপশনও স্বয়ংক্রিয়ভাবে মুছে যাবে।
+  → ->with('success', '...'): Session এ একটি success মেসেজ রাখে।
+    ভিউতে session('success') দিয়ে এটি দেখানো হয়।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⑦ toggleStatus(Question $question) — স্ট্যাটাস টগল
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  public function toggleStatus(Question $question)
+  {
+      $question->update([
+          'status' => $question->isPublished() ? 'draft' : 'published',
+      ]);
+      return back()->with('success', 'Status updated.');
+  }
+
+  → $question->isPublished() ? 'draft' : 'published' :
+    যদি এখন published থাকে তাহলে draft করো, না হলে published করো।
+  → এটি একটি টার্নারি অপারেটর। একই অবজেক্টে দুটির একটি মান সেট হয়।
+  → return back(): যেই পেজ থেকে ক্লিক করা হয়েছিল সেখানে ফিরে যাবে।
+  → কোনো confirm dialog নেই — সরাসরি টগল হয়।
+
+
+================================================================================
+                            ভিউ ব্যাখ্যা
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 resources/views/admin/layout.blade.php — অ্যাডমিন লেআউট
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  এটি অ্যাডমিন প্যানেলের মূল টেমপ্লেট। সব অ্যাডমিন ভিউ এটিকে extend করে।
+
+  গুরুত্বপূর্ণ অংশ:
+
+  @yield('page-title', 'Dashboard')
+  → অন্য ভিউ থেকে @section('page-title', 'All Questions') দিয়ে
+    এই স্থানে টাইটেল বসানো যায়।
+
+  @yield('content')
+  → অন্য ভিউ থেকে @section('content') ... @endsection এর মধ্যে যা থাকবে
+    সেটি এখানে রেন্ডার হবে।
+
+  @stack('scripts')
+  → অন্য ভিউ থেকে @push('scripts') ... @endpush দিয়ে JavaScript যোগ করা যায়।
+
+  Flash Message:
+  @if(session('success'))
+      <div class="alert alert-success">{{ session('success') }}</div>
+  @endif
+
+  → কন্ট্রোলার থেকে ->with('success', '...') দিয়ে পাঠানো মেসেজ দেখায়।
+  → একই রকমভাবে session('error') ও আছে।
+
+  Sidebar Navigation:
+  → request()->routeIs('admin.questions.index') দিয়ে বর্তমান পেজের লিংকটিকে
+    active হিসেবে হাইলাইট করা হয়।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 resources/views/admin/questions/index.blade.php — প্রশ্নের তালিকা
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ৩টি Stat Card:
+  → মোট প্রশ্ন, published প্রশ্ন, draft প্রশ্ন সংখ্যা দেখায়।
+  → Question::where('status','published')->count() দিয়ে সরাসরি ডেটাবেজ থেকে গণনা।
+
+  টেবিলের কলাম:
+  ① # : sort_order নম্বর
+  ② Question & Options: প্রশ্নের টেক্সট + অপশন পিল (সবুজ = সঠিক, ধূসর = ভুল)
+  ③ Options: কতটি অপশন আছে ($question->options_count)
+  ④ Status: published/draft badge
+  ⑤ Actions: Toggle, Edit, Delete বোতাম
+
+  Str::limit($question->question_text, 80):
+  → দীর্ঘ প্রশ্ন টেক্সটকে ৮০ অক্ষরে কেটে "..." যোগ করে দেখায়।
+
+  Delete ফর্ম:
+  → @method('DELETE') দিয়ে HTML ফর্মকে DELETE রিকোয়েস্ট পাঠাতে বলা হয়।
+    (HTML ফর্ম শুধু GET/POST সাপোর্ট করে, তাই Laravel এই পদ্ধতি ব্যবহার করে)
+  → onsubmit="return confirm('...')" দিয়ে ব্রাউজার confirm ডায়ালগ দেখায়।
+
+  {{ $questions->links() }}:
+  → পেজিনেশন লিংক রেন্ডার করে, AppServiceProvider এর কারণে
+    আমাদের custom pagination view ব্যবহার করে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 resources/views/admin/questions/create.blade.php — প্রশ্ন তৈরি
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ফর্মটি POST করে admin.questions.store রাউটে।
+
+  @error('question_text')<div class="error-msg">{{ $message }}</div>@enderror
+  → ভ্যালিডেশন ব্যর্থ হলে নির্দিষ্ট ফিল্ডের নিচে ত্রুটি বার্তা দেখায়।
+
+  old('question_text') :
+  → ভ্যালিডেশন ব্যর্থ হলে ব্যবহারকারী যা টাইপ করেছিলেন তা পুনরায় দেখায়।
+    ফর্ম পুনরায় পূরণ করতে হবে না।
+
+  JavaScript অংশ (@push('scripts')):
+
+  buildRow(index, text, isCorrect):
+  → একটি অপশন row তৈরি করে। প্রতিটি row-তে আছে:
+    - Radio বোতাম (সঠিক উত্তর নির্বাচন)
+    - Text input (অপশনের লেখা)
+    - Remove বোতাম (সেই অপশন বাদ দেওয়া)
+
+  rebuildIndexes():
+  → মাঝের কোনো অপশন মুছে ফেললে বাকি অপশনগুলোর index পুনর্বিন্যাস করে।
+    উদাহরণ: ৪টি অপশন আছে, মাঝের ২নং মুছলে নাম হবে 0, 1, 2 (আগে ছিল 0,1,2,3)।
+    এটি জরুরি কারণ backend correct_option এর মান দিয়ে array index মেলায়।
+
+  updateUI():
+  → ৪টি অপশন হলে "Add another option" বোতাম লুকায়।
+  → ২টি অপশন হলে Remove বোতামগুলো লুকায় (কমপক্ষে ২টি থাকতে হবে)।
+
+  old() দিয়ে ভ্যালিডেশন ব্যর্থ হলে পুনরায় অপশন:
+  if (oldOptions.length >= 2) {
+      oldOptions.forEach((opt, i) => addOption(opt.text, i === parseInt(oldCorrect)));
+  }
+  → যদি old() তে অপশন ডেটা থাকে (ভ্যালিডেশন ব্যর্থ হয়েছিল), সেগুলো দিয়ে
+    অপশন row তৈরি করে।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 resources/views/admin/questions/edit.blade.php — প্রশ্ন এডিট
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  create.blade.php এর মতোই, কিছু পার্থক্য আছে:
+
+  @method('PUT') :
+  → HTML ফর্মকে PUT রিকোয়েস্ট পাঠাতে বলে (resource update এর জন্য)।
+
+  old('question_text', $question->question_text):
+  → প্রথমে old() চেক করে (ভ্যালিডেশন ব্যর্থ হলে),
+    না থাকলে ডেটাবেজের বর্তমান মান দেখায়।
+
+  JavaScript এ DB ডেটা লোড:
+  const dbOptions = @json($question->options->map(...));
+  → Blade এর @json() দিরেক্টিভ PHP অ্যারে/কালেকশন কে JSON এ রূপান্তর করে।
+  → এই JSON JavaScript ম্যাপে রূপান্তরিত হয়ে অপশন row তৈরি করে।
+
+  old() vs dbOptions অগ্রাধিকার:
+  if (oldOptions && oldOptions.length >= 2) {
+      // ভ্যালিডেশন ব্যর্থ হলে old() থেকে পুনরায় দেখাও
+  } else {
+      // প্রথমবার লোড হলে ডেটাবেজের ডেটা দেখাও
+  }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 resources/views/admin/pagination.blade.php — কাস্টম পেজিনেশন
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  → $paginator->hasPages(): পেজিনেশন দরকার কিনা চেক করে।
+    মোট রেকর্ড যদি paginate সংখ্যার চেয়ে কম হয়, পেজিনেশন দেখাবে না।
+  → $paginator->firstItem() / lastItem(): বর্তমান পেজে কত নম্বর থেকে কত পর্যন্ত।
+  → $paginator->onFirstPage(): প্রথম পেজে আছে কিনা (Previous বোতাম disable)।
+  → $paginator->currentPage(): বর্তমান পেজ নম্বর (active স্টাইল দেয়)।
+  → $paginator->hasMorePages(): আরো পেজ আছে কিনা (Next বোতাম enable/disable)।
+  → $elements: পেজ নম্বরের অ্যারে বা "..." স্ট্রিং।
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 resources/views/quiz/index.blade.php — পাবলিক কুইজ পেজ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  @php ব্লক:
+  → $quizData ভেরিয়েবলে সব প্রশ্ন ও অপশন PHP array হিসেবে তৈরি করা হয়।
+  → তারপর @json($quizData) দিয়ে JavaScript এ পাঠানো হয়।
+    (সরাসরি @json এ arrow function ব্যবহার করলে Blade parser সমস্যা করত, তাই @php ব্লক ব্যবহার করা হয়েছে।)
+
+  JavaScript এর মূল লজিক:
+
+  render(idx) ফাংশন:
+  → নির্দিষ্ট ইনডেক্সের প্রশ্ন ও অপশন রেন্ডার করে।
+  → যদি সেই প্রশ্নের উত্তর দেওয়া থাকে (answered[idx] = true),
+    তাহলে সঠিক অপশন সবুজ, ভুল অপশন লাল দেখায়।
+  → Previous বোতাম: প্রথম প্রশ্নে disabled।
+  → Next বোতাম: উত্তর না দিলে disabled।
+
+  handleAnswer(qIdx, optIdx, isCorrect) ফাংশন:
+  → উত্তর দেওয়া হলে:
+    ① answered[qIdx] = true করে (এই প্রশ্নের উত্তর দেওয়া হয়ে গেছে)।
+    ② chosen[qIdx] = optIdx করে (কোন অপশন বেছেছে মনে রাখে)।
+    ③ সঠিক উত্তর হলে score++ করে।
+    ④ render() কল করে ফলাফল দেখায়।
+
+  showResult() ফাংশন:
+  → কুইজ শেষ হলে result screen দেখায়।
+  → conic-gradient দিয়ে circular score ring তৈরি করে।
+    উদাহরণ: ৭০% স্কোর হলে → ৭০*৩.৬ = ২৫২ ডিগ্রি সবুজ, বাকিটা ধূসর।
+  → স্কোর অনুযায়ী ভিন্ন ভিন্ন message দেখায়।
+
+  answered[] array:
+  → প্রতিটি প্রশ্নের জন্য উত্তর দেওয়া হয়েছে কিনা (true/false) সংরক্ষণ করে।
+  → এটি দিয়ে Previous-এ গেলেও পুরোনো উত্তর দেখানো যায়।
+
+  chosen[] array:
+  → প্রতিটি প্রশ্নে কোন অপশন নির্বাচন করা হয়েছিল তার index সংরক্ষণ করে।
+  → Previous এ গেলে আগের নির্বাচিত অপশন হাইলাইট থাকে।
+
+
+================================================================================
+                        AppServiceProvider ব্যাখ্যা
+================================================================================
+
+📄 app/Providers/AppServiceProvider.php
+
+  public function boot(): void
+  {
+      Paginator::defaultView('admin.pagination');
+  }
+
+  → boot() মেথড: Application সম্পূর্ণভাবে লোড হওয়ার পরে এই কোড চলে।
+  → Paginator::defaultView('admin.pagination'): Laravel এর ডিফল্ট পেজিনেশন
+    ভিউ পরিবর্তন করে আমাদের কাস্টম dark-themed pagination ভিউ ব্যবহার করে।
+  → এখন যেকোনো জায়গায় $collection->links() কল করলে
+    resources/views/admin/pagination.blade.php রেন্ডার হবে।
+
+
+================================================================================
+                            Laravel Breeze ব্যাখ্যা
+================================================================================
+
+Breeze হলো Laravel এর অফিশিয়াল authentication scaffolding প্যাকেজ।
+
+  composer require laravel/breeze --dev
+  php artisan breeze:install blade
+
+  এটি যা যা তৈরি করে:
+  ├── app/Http/Controllers/Auth/
+  │   ├── AuthenticatedSessionController.php  ← লগইন/লগআউট
+  │   ├── RegisteredUserController.php        ← রেজিস্ট্রেশন
+  │   ├── PasswordResetLinkController.php     ← পাসওয়ার্ড রিসেট
+  │   └── ... (আরো কয়েকটি)
+  ├── resources/views/auth/
+  │   ├── login.blade.php                     ← লগইন পেজ
+  │   ├── register.blade.php                  ← রেজিস্ট্রেশন পেজ
+  │   └── ...
+  └── routes/auth.php                         ← সব auth রাউট
+
+  auth middleware:
+  → middleware(['auth']) থাকা রাউটে লগইন না করে গেলে
+    স্বয়ংক্রিয়ভাবে /login পেজে রিডাইরেক্ট করে।
+  → লগইন সফল হলে dashboard রাউটে পাঠায়, যেটি আমরা
+    admin.questions.index এ রিডাইরেক্ট করেছি।
+
+
+================================================================================
+                            CSS থিম ব্যাখ্যা
+================================================================================
+
+প্রজেক্টে CSS Variables ব্যবহার করা হয়েছে:
+
+  :root {
+      --bg: #0a0c12;      ← পেজের মূল ব্যাকগ্রাউন্ড (গাঢ় কালো)
+      --surface: #12151f; ← কার্ড/সাইডবার ব্যাকগ্রাউন্ড
+      --surface2: #1a1e2e;← ইনপুট/টেবিল row hover ব্যাকগ্রাউন্ড
+      --border: #252a3d;  ← বর্ডারের রঙ
+      --accent: #00d4ff;  ← হাইলাইট রঙ (নীলাভ সায়ান)
+      --green: #00e5a0;   ← সঠিক উত্তর / published / success
+      --red: #ff4d6d;     ← ভুল উত্তর / error
+      --text: #dde4f0;    ← মূল টেক্সট রঙ
+      --muted: #5a6380;   ← কম গুরুত্বপূর্ণ টেক্সট
+  }
+
+  → ফন্ট: Google Fonts থেকে "Hind Siliguri" ব্যবহার করা হয়েছে
+    যা বাংলা ও ইংরেজি উভয় ভাষায় সুন্দরভাবে প্রদর্শন করে।
+  → কোনো বাইরের CSS framework (Bootstrap/Tailwind) ব্যবহার করা হয়নি।
+    সম্পূর্ণ Pure CSS।
+
+
+================================================================================
+                            কীভাবে ব্যবহার করবেন
+================================================================================
+
+১. অ্যাডমিন হিসেবে লগইন:
+   → http://127.0.0.1:8000/register  (প্রথমবার অ্যাকাউন্ট তৈরি)
+   → http://127.0.0.1:8000/login     (পরবর্তীবার লগইন)
+
+২. প্রশ্ন তৈরি:
+   → লগইন করলে সরাসরি admin panel এ যাবে।
+   → "+ New Question" বোতামে ক্লিক করুন।
+   → প্রশ্ন লিখুন, ২-৪টি অপশন যোগ করুন, সঠিক উত্তরে radio select করুন।
+   → Status "published" রাখলে কুইজ পেজে দেখা যাবে।
+
+৩. প্রশ্ন পাবলিশ/আনপাবলিশ:
+   → তালিকায় ▶ বোতাম চাপলে draft থেকে published হবে।
+   → ⏸ বোতাম চাপলে published থেকে draft হবে।
+
+৪. কুইজ দেওয়া:
+   → http://127.0.0.1:8000/quiz  (লগইন ছাড়াই অ্যাক্সেস করা যাবে)
+   → শুধু published প্রশ্নগুলো দেখাবে।
+   → প্রতিটি প্রশ্নের উত্তর দিলে সাথে সাথে ফলাফল দেখাবে।
+   → শেষে সামগ্রিক স্কোর দেখাবে।
+
+================================================================================
+                                    শেষ কথা
+================================================================================
+
+এই প্রজেক্টে ব্যবহৃত মূল Laravel কনসেপ্টসমূহ:
+  ✔ MVC Architecture (Model-View-Controller)
+  ✔ Eloquent ORM (Query Builder নয়, Object-Relational Mapping)
+  ✔ Eloquent Relationships (hasMany, belongsTo)
+  ✔ Route Model Binding
+  ✔ Resource Controllers
+  ✔ Form Validation (Request validation rules)
+  ✔ Blade Templates (extend, yield, section, stack, push)
+  ✔ Middleware (auth protection)
+  ✔ Flash Messages (session with/flash)
+  ✔ Eager Loading (with, withCount — N+1 সমস্যা এড়াতে)
+  ✔ Cascade Delete (foreign key দিয়ে)
+  ✔ Custom Pagination View
+  ✔ Laravel Breeze (Authentication)
+  ✔ CSS Variables (Dark Theme)
+  ✔ Vanilla JavaScript (Dynamic DOM manipulation)
+
+================================================================================
